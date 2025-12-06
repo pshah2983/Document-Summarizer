@@ -1,25 +1,59 @@
 import PyPDF2
 import docx
 import os
-from transformers import pipeline
-import nltk
-from nltk.tokenize import sent_tokenize
+import re
+import google.generativeai as genai
 
-nltk.download('punkt', quiet=True)
+# Configure Gemini API - supports both GEMINI_API_KEY and GOOGLE_API_KEY
+API_KEY = os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY', '')
+if API_KEY:
+    genai.configure(api_key=API_KEY)
 
-summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-qa_model = pipeline("question-answering", model="deepset/roberta-base-squad2")
+# Initialize the Gemini model
+def get_gemini_model():
+    """Get the Gemini model instance."""
+    api_key = os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY', '')
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY environment variable is not set. Please set it to use the summarization and Q&A features.")
+    genai.configure(api_key=api_key)
+    # Use gemini-2.0-flash which is the current available model
+    return genai.GenerativeModel('gemini-2.0-flash')
+
+def clean_text(text):
+    """Cleans extracted text by fixing common OCR errors and formatting issues."""
+    # Remove common problematic ligatures/broken words from PDF extraction
+    text = re.sub(r'oﬀ', 'off', text, flags=re.IGNORECASE)
+    text = re.sub(r'e-tick eting', 'e-ticketing', text, flags=re.IGNORECASE)
+    text = re.sub(r'c are', 'care', text, flags=re.IGNORECASE)
+    text = re.sub(r'u/ s', 'u/s', text, flags=re.IGNORECASE)
+
+    # Replace multiple spaces with a single space
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    # Attempt to fix hyphenated words broken across lines
+    text = re.sub(r'(\w+)-\s*\n\s*(\w+)', r'\1\2', text)
+    
+    return text
 
 def process_document(filepath):
+    """Extract text from a document file and clean it."""
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(f"Document file not found: {filepath}")
+
     file_ext = os.path.splitext(filepath)[1].lower()
+    
+    raw_text = ""
     if file_ext == '.pdf':
-        return extract_text_from_pdf(filepath)
+        raw_text = extract_text_from_pdf(filepath)
     elif file_ext in ['.docx', '.doc']:
-        return extract_text_from_docx(filepath)
+        raw_text = extract_text_from_docx(filepath)
     else:
         raise ValueError(f"Unsupported file type: {file_ext}")
 
+    return clean_text(raw_text)
+
 def extract_text_from_pdf(filepath):
+    """Extract text from a PDF file."""
     text = ""
     with open(filepath, 'rb') as file:
         pdf_reader = PyPDF2.PdfReader(file)
@@ -30,181 +64,98 @@ def extract_text_from_pdf(filepath):
     return text
 
 def extract_text_from_docx(filepath):
+    """Extract text from a DOCX file."""
     doc = docx.Document(filepath)
     text = ""
     for paragraph in doc.paragraphs:
         text += paragraph.text + "\n"
     return text
 
-def get_summary(text, max_length=180, min_length=60):
-    # Clean and filter text for summarization
-    sentences = sent_tokenize(text)
-    # Remove very short/irrelevant sentences
-    filtered = [s for s in sentences if len(s.split()) > 6]
-    # Use only the most relevant 20 sentences (or less)
-    context = " ".join(filtered[:20])
-    if not context:
-        context = text
-    # If context is still too long, chunk it
-    chunks = split_text_into_chunks(context, max_length=900)
-    summaries = []
-    for chunk in chunks:
-        summary = summarizer(chunk, max_length=max_length, min_length=min_length, do_sample=False)
-        summaries.append(summary[0]['summary_text'])
-    # If multiple summaries, summarize them again
-    if len(summaries) > 1:
-        combined = " ".join(summaries)
-        final = summarizer(combined, max_length=max_length, min_length=min_length, do_sample=False)
-        return final[0]['summary_text']
-    return summaries[0]
+def get_summary(text, max_length=300):
+    """Generate an intelligent summary using Google Gemini."""
+    try:
+        model = get_gemini_model()
+        
+        # Truncate text if too long (Gemini can handle large context, but we limit for speed)
+        if len(text) > 15000:
+            text = text[:15000] + "..."
+        
+        prompt = f"""Analyze the following document and provide a clear, well-structured summary.
+
+Instructions:
+1. Identify the type of document (invoice, receipt, report, article, letter, etc.)
+2. Extract and highlight the most important information:
+   - For invoices/receipts: amounts, dates, parties involved, items/services
+   - For reports/articles: main topic, key findings, conclusions
+   - For letters/correspondence: sender, recipient, main purpose, key points
+3. Present the summary in a readable format with key details clearly stated
+4. Keep the summary concise but comprehensive (around 150-250 words)
+
+Document content:
+{text}
+
+Summary:"""
+
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    
+    except Exception as e:
+        error_msg = str(e)
+        if "API_KEY" in error_msg.upper() or "authentication" in error_msg.lower():
+            return "Error: Please set your GEMINI_API_KEY environment variable to enable summarization."
+        raise Exception(f"Failed to generate summary: {error_msg}")
 
 def get_answer(text, question):
-    # Always use the full document context, chunked if needed
-    chunks = split_text_into_chunks(text, max_length=900)
-    best_score = 0
-    best_answer = None
-    for chunk in chunks:
-        result = qa_model(question=question, context=chunk)
-        if result['score'] > best_score and result['answer'].strip():
-            best_score = result['score']
-            best_answer = result['answer']
-    if best_answer is None:
-        return "I couldn't find a relevant answer in the document."
-    return best_answer
+    """Answer questions about the document using Google Gemini."""
+    try:
+        model = get_gemini_model()
+        
+        # Truncate text if too long
+        if len(text) > 15000:
+            text = text[:15000] + "..."
+        
+        prompt = f"""You are a helpful document assistant. Answer the following question based ONLY on the information provided in the document below.
+
+Instructions:
+1. Answer the question directly and accurately
+2. If the answer can be found in the document, provide it clearly
+3. If the answer is not in the document, say "This information is not available in the document."
+4. For yes/no questions, answer yes or no first, then provide supporting details from the document
+5. Be concise but thorough
+
+Document content:
+{text}
+
+Question: {question}
+
+Answer:"""
+
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    
+    except Exception as e:
+        error_msg = str(e)
+        if "API_KEY" in error_msg.upper() or "authentication" in error_msg.lower():
+            return "Error: Please set your GEMINI_API_KEY environment variable to enable Q&A."
+        raise Exception(f"Failed to answer question: {error_msg}")
 
 def split_text_into_chunks(text, max_length=900):
+    """Split text into chunks of maximum length based on words."""
     words = text.split()
     chunks = []
     current_chunk = []
     current_length = 0
+    
     for word in words:
-        current_length += len(word) + 1
-        if current_length > max_length:
+        if current_length + len(word) + 1 > max_length and current_chunk:
             chunks.append(" ".join(current_chunk))
             current_chunk = [word]
-            current_length = len(word)
+            current_length = len(word) + 1
         else:
             current_chunk.append(word)
+            current_length += len(word) + 1
+    
     if current_chunk:
         chunks.append(" ".join(current_chunk))
+    
     return chunks
-
-def process_pdf(file_path):
-    """
-    Extract text from a PDF file with improved structure preservation.
-    """
-    text = ""
-    with open(file_path, 'rb') as file:
-        pdf_reader = PyPDF2.PdfReader(file)
-        for page in pdf_reader.pages:
-            # Extract text with layout preservation
-            page_text = page.extract_text()
-            
-            # Clean and structure the text
-            page_text = clean_text(page_text)
-            
-            # Add page separator
-            text += page_text + "\n\n"
-    
-    return structure_text(text)
-
-def process_word(file_path):
-    """
-    Extract text from a Word document with improved structure preservation.
-    """
-    doc = Document(file_path)
-    text = ""
-    
-    # Process paragraphs with their formatting
-    for paragraph in doc.paragraphs:
-        if paragraph.text.strip():
-            text += paragraph.text + "\n"
-    
-    # Process tables
-    for table in doc.tables:
-        for row in table.rows:
-            row_text = " | ".join(cell.text.strip() for cell in row.cells if cell.text.strip())
-            if row_text:
-                text += row_text + "\n"
-    
-    return structure_text(text)
-
-def clean_text(text):
-    """
-    Clean and preprocess the extracted text while preserving important structure.
-    """
-    # Fix broken words (words with spaces in between)
-    text = re.sub(r'(\w)\s+(\w)', r'\1\2', text)
-    
-    # Remove extra whitespace while preserving line breaks
-    text = re.sub(r'\s+', ' ', text)
-    
-    # Preserve important separators
-    text = text.replace('|', ' | ')
-    text = text.replace('-', ' - ')
-    
-    # Fix common OCR issues
-    text = re.sub(r'(\d)\s+(\d)', r'\1\2', text)  # Fix broken numbers
-    text = re.sub(r'([a-zA-Z])\s+([a-zA-Z])', r'\1\2', text)  # Fix broken words
-    
-    # Remove multiple spaces
-    text = ' '.join(text.split())
-    
-    return text
-
-def structure_text(text):
-    """
-    Structure the text to preserve important information and relationships.
-    """
-    # Split into lines
-    lines = text.split('\n')
-    structured_lines = []
-    
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-            
-        # Check if line contains key-value pairs
-        if ':' in line:
-            key, value = line.split(':', 1)
-            structured_lines.append(f"{key.strip()}: {value.strip()}")
-        else:
-            # Try to fix any remaining broken words in the line
-            line = re.sub(r'(\w)\s+(\w)', r'\1\2', line)
-            structured_lines.append(line)
-    
-    return '\n'.join(structured_lines)
-
-def chunk_text(text, chunk_size=1500):
-    """
-    Split text into smaller chunks while preserving context and structure.
-    """
-    # First, split by double newlines to preserve document structure
-    sections = text.split('\n\n')
-    chunks = []
-    current_chunk = []
-    current_size = 0
-    
-    for section in sections:
-        # Split section into sentences
-        sentences = sent_tokenize(section)
-        
-        for sentence in sentences:
-            # Fix any remaining broken words in the sentence
-            sentence = re.sub(r'(\w)\s+(\w)', r'\1\2', sentence)
-            sentence_size = len(sentence.split())
-            
-            if current_size + sentence_size > chunk_size:
-                if current_chunk:
-                    chunks.append(' '.join(current_chunk))
-                current_chunk = [sentence]
-                current_size = sentence_size
-            else:
-                current_chunk.append(sentence)
-                current_size += sentence_size
-    
-    if current_chunk:
-        chunks.append(' '.join(current_chunk))
-    
-    return chunks 

@@ -4,17 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Document Summarizer</title>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&family=Inter:wght@400;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
+        html, body {
+            height: 100%;
+            min-height: 100%;
+            overflow-y: auto !important; /* Ensure scrolling is enabled */
+        }
         body {
             font-family: 'Montserrat', 'Inter', Arial, sans-serif;
         }
         .gradient-bg {
             background: linear-gradient(135deg, #0f2027 0%, #2c5364 100%);
             position: relative;
-            overflow: hidden;
+            /* overflow: hidden; Removed to allow scroll */
         }
         .glass-effect {
             background: rgba(30, 41, 59, 0.7);
@@ -54,9 +59,27 @@
             0% { top: -100vh; }
             100% { top: 100vh; }
         }
+        /* Loading Spinner Styles */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #00fff0;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+        .spinner.active {
+            display: block;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
-<body class="gradient-bg min-h-screen text-white">
+<body class="gradient-bg text-white">
     <!-- Animated Glowing Lines -->
     <div class="glow-line"></div>
     <div class="glow-line"></div>
@@ -65,7 +88,9 @@
     <!-- Navigation -->
     <nav class="glass-effect p-4">
         <div class="container mx-auto flex justify-between items-center">
-            <div class="text-2xl font-bold tracking-widest" style="font-family: 'Orbitron', 'Montserrat', Arial, sans-serif;">DocSum AI</div>
+            <div class="text-2xl font-bold tracking-widest" style="font-family: 'Montserrat', 'Inter', Arial, sans-serif;">
+                <a href="{{ url_for('index') }}" class="text-white hover:text-cyan-300 transition">DocSum AI</a>
+            </div>
             <div class="flex items-center space-x-4">
                 <span class="text-cyan-200">Welcome, {{ current_user.name }}</span>
                 <a href="{{ url_for('logout') }}" class="text-red-400 hover:text-red-300">Logout</a>
@@ -76,10 +101,10 @@
     <div class="container mx-auto px-4 py-8">
         <!-- Upload Section -->
         <div class="glass-effect rounded-xl p-8 mb-8">
-            <h2 class="text-2xl font-bold mb-4" style="font-family: 'Orbitron', 'Montserrat', Arial, sans-serif;">Upload Document</h2>
+            <h2 class="text-2xl font-bold mb-4" style="font-family: 'Montserrat', 'Inter', Arial, sans-serif;">Upload Document</h2>
             <div class="upload-area rounded-lg p-8 text-center cursor-pointer" id="dropZone">
                 <i class="fas fa-cloud-upload-alt text-4xl mb-4 text-cyan-400"></i>
-                <h3 class="text-xl mb-2">Drag & Drop your document here</h3>
+                <h3 class="text-xl mb-2" style="font-family: 'Montserrat', 'Inter', Arial, sans-serif;">Drag & Drop your document here</h3>
                 <p class="text-cyan-200 mb-4">or</p>
                 <input type="file" id="fileInput" class="hidden" accept=".pdf,.docx,.doc">
                 <button onclick="document.getElementById('fileInput').click()"
@@ -87,12 +112,48 @@
                     Choose File
                 </button>
                 <p class="text-cyan-200 mt-4">Supported formats: PDF, DOCX, DOC</p>
+                <div class="spinner" id="uploadSpinner"></div>
+            </div>
+        </div>
+
+        <!-- How It Works Section on Dashboard -->
+        <div class="glass-effect rounded-xl p-8 mb-8">
+            <h2 class="text-2xl font-bold mb-4 text-center" style="font-family: 'Montserrat', 'Inter', Arial, sans-serif;">How DocSum AI Works</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-8 text-center">
+                <div class="py-4">
+                    <div class="glass-effect w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-upload text-2xl"></i>
+                    </div>
+                    <h3 class="font-bold mb-2">Upload</h3>
+                    <p class="text-cyan-200">Upload your PDF or Word documents securely.</p>
+                </div>
+                <div class="py-4">
+                    <div class="glass-effect w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-robot text-2xl"></i>
+                    </div>
+                    <h3 class="font-bold mb-2">Process</h3>
+                    <p class="text-cyan-200">AI analyzes and extracts key information.</p>
+                </div>
+                <div class="py-4">
+                    <div class="glass-effect w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-file-signature text-2xl"></i>
+                    </div>
+                    <h3 class="font-bold mb-2">Summarize</h3>
+                    <p class="text-cyan-200">Get concise summaries of your content.</p>
+                </div>
+                <div class="py-4">
+                    <div class="glass-effect w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-comments text-2xl"></i>
+                    </div>
+                    <h3 class="font-bold mb-2">Ask Questions</h3>
+                    <p class="text-cyan-200">Get instant, precise answers to your questions.</p>
+                </div>
             </div>
         </div>
 
         <!-- Documents Section -->
         <div class="glass-effect rounded-xl p-8">
-            <h2 class="text-2xl font-bold mb-4" style="font-family: 'Orbitron', 'Montserrat', Arial, sans-serif;">Your Documents</h2>
+            <h2 class="text-2xl font-bold mb-4" style="font-family: 'Montserrat', 'Inter', Arial, sans-serif;">Your Documents</h2>
             {% if documents %}
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {% for doc in documents %}
@@ -101,7 +162,7 @@
                         <div class="flex items-center">
                             <i class="fas fa-file-alt text-2xl text-cyan-400 mr-3"></i>
                             <div>
-                                <h3 class="font-bold">{{ doc.filename }}</h3>
+                                <h3 class="font-bold" style="font-family: 'Montserrat', 'Inter', Arial, sans-serif;">{{ doc.filename }}</h3>
                                 <p class="text-sm text-cyan-200">{{ doc.upload_date.strftime('%Y-%m-%d %H:%M') }}</p>
                             </div>
                         </div>
@@ -133,7 +194,7 @@
     <div id="documentModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
         <div class="glass-effect rounded-xl p-8 max-w-2xl w-full mx-4">
             <div class="flex justify-between items-center mb-6">
-                <h3 class="text-xl font-bold">Document Details</h3>
+                <h3 class="text-xl font-bold" style="font-family: 'Montserrat', 'Inter', Arial, sans-serif;">Document Details</h3>
                 <button onclick="closeModal()" class="text-gray-400 hover:text-white">
                     <i class="fas fa-times"></i>
                 </button>
@@ -142,15 +203,16 @@
                 <!-- Content will be loaded dynamically -->
             </div>
             <div class="mt-6">
-                <h4 class="font-bold mb-2">Ask a Question</h4>
+                <h4 class="font-bold mb-2" style="font-family: 'Montserrat', 'Inter', Arial, sans-serif;">Ask a Question</h4>
                 <div class="flex space-x-2">
                     <input type="text" id="questionInput" placeholder="Type your question..."
-                        class="flex-1 px-4 py-2 rounded-lg bg-white bg-opacity-10 border border-white border-opacity-20 focus:outline-none focus:border-cyan-500">
+                        class="flex-1 px-4 py-2 rounded-lg bg-white bg-opacity-10 border border-white border-opacity-20 focus:outline-none focus:border-cyan-500 text-white">
                     <button onclick="askQuestion()"
                         class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg transition duration-200">
                         Ask
                     </button>
                 </div>
+                <div class="spinner" id="qaSpinner"></div>
                 <div id="answerBox" class="mt-4 p-4 rounded-lg bg-white bg-opacity-5 hidden">
                     <!-- Answer will be loaded dynamically -->
                 </div>
@@ -162,6 +224,8 @@
         // File Upload Handling
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
+        const uploadSpinner = document.getElementById('uploadSpinner');
+        const qaSpinner = document.getElementById('qaSpinner');
         const documentModal = document.getElementById('documentModal');
         const documentContent = document.getElementById('documentContent');
         const answerBox = document.getElementById('answerBox');
@@ -179,20 +243,12 @@
 
         // Highlight drop zone when item is dragged over it
         ['dragenter', 'dragover'].forEach(eventName => {
-            dropZone.addEventListener(eventName, highlight, false);
+            dropZone.classList.add('border-cyan-500', 'bg-cyan-500', 'bg-opacity-10');
         });
 
         ['dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, unhighlight, false);
-        });
-
-        function highlight(e) {
-            dropZone.classList.add('border-cyan-500', 'bg-cyan-500', 'bg-opacity-10');
-        }
-
-        function unhighlight(e) {
             dropZone.classList.remove('border-cyan-500', 'bg-cyan-500', 'bg-opacity-10');
-        }
+        });
 
         // Handle dropped files
         dropZone.addEventListener('drop', handleDrop, false);
@@ -221,6 +277,7 @@
         }
 
         function uploadFile(file) {
+            uploadSpinner.classList.add('active'); // Show spinner
             const formData = new FormData();
             formData.append('file', file);
 
@@ -230,14 +287,16 @@
             })
             .then(response => response.json())
             .then(data => {
+                uploadSpinner.classList.remove('active'); // Hide spinner
                 if (data.success) {
                     window.location.reload();
                 } else {
-                    alert('Error: ' + data.error);
+                    alert('Upload Failed: ' + data.error);
                 }
             })
             .catch(error => {
-                alert('Error uploading file: ' + error);
+                uploadSpinner.classList.remove('active'); // Hide spinner
+                alert('Network or server error during upload. Please check your connection and try again.' + error);
             });
         }
 
@@ -249,19 +308,19 @@
                     if (data.success) {
                         documentContent.innerHTML = `
                             <div>
-                                <h4 class="font-bold mb-2">Summary</h4>
+                                <h4 class="font-bold mb-2" style="font-family: 'Montserrat', 'Inter', Arial, sans-serif;">Summary</h4>
                                 <p class="text-cyan-200">${data.summary}</p>
                             </div>
                         `;
-                        documentContent.setAttribute('data-doc-id', docId);
+                        documentContent.setAttribute('data-doc-id', docId); // Set docId for QA
                         documentModal.classList.remove('hidden');
                         documentModal.classList.add('flex');
                     } else {
-                        alert('Error: ' + data.error);
+                        alert('Error loading document: ' + data.error);
                     }
                 })
                 .catch(error => {
-                    alert('Error loading document: ' + error);
+                    alert('Network or server error loading document. Please try again.' + error);
                 });
         }
 
@@ -269,6 +328,8 @@
             documentModal.classList.add('hidden');
             documentModal.classList.remove('flex');
             answerBox.classList.add('hidden');
+            document.getElementById('questionInput').value = ''; // Clear question input
+            qaSpinner.classList.remove('active'); // Ensure QA spinner is hidden on close
         }
 
         function askQuestion() {
@@ -276,6 +337,14 @@
             if (!question) return;
 
             const docId = documentContent.getAttribute('data-doc-id');
+            if (!docId) {
+                alert("Error: No document selected for Q&A. Please open a document first.");
+                return;
+            }
+
+            qaSpinner.classList.add('active'); // Show QA spinner
+            answerBox.classList.add('hidden'); // Hide previous answer
+
             fetch('/ask', {
                 method: 'POST',
                 headers: {
@@ -288,22 +357,26 @@
             })
             .then(response => response.json())
             .then(data => {
+                qaSpinner.classList.remove('active'); // Hide QA spinner
                 if (data.success) {
                     answerBox.innerHTML = `
                         <div>
-                            <h4 class="font-bold mb-2">Question:</h4>
+                            <h4 class="font-bold mb-2" style="font-family: 'Montserrat', 'Inter', Arial, sans-serif;">Question:</h4>
                             <p class="text-cyan-200 mb-4">${question}</p>
-                            <h4 class="font-bold mb-2">Answer:</h4>
+                            <h4 class="font-bold mb-2" style="font-family: 'Montserrat', 'Inter', Arial, sans-serif;">Answer:</h4>
                             <p class="text-cyan-200">${data.answer}</p>
                         </div>
                     `;
                     answerBox.classList.remove('hidden');
                 } else {
-                    alert('Error: ' + data.error);
+                    alert('QA Error: ' + data.error);
+                    answerBox.classList.add('hidden'); // Keep answer box hidden on error
                 }
             })
             .catch(error => {
-                alert('Error asking question: ' + error);
+                qaSpinner.classList.remove('active'); // Hide QA spinner
+                alert('Network or server error during Q&A. Please check your connection and try again.' + error);
+                answerBox.classList.add('hidden'); // Keep answer box hidden on error
             });
         }
 
@@ -317,11 +390,11 @@
                     if (data.success) {
                         window.location.reload();
                     } else {
-                        alert('Error: ' + data.error);
+                        alert('Error deleting document: ' + data.error);
                     }
                 })
                 .catch(error => {
-                    alert('Error deleting document: ' + error);
+                    alert('Network or server error during deletion. Please try again.' + error);
                 });
             }
         }

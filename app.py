@@ -5,8 +5,13 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import os
 from datetime import datetime
-from utils.document_processor import process_document, get_summary, get_answer
 import time
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+from utils.document_processor import process_document, get_summary, get_answer
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
@@ -15,8 +20,13 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Ensure upload directory exists
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+# Ensure upload directory exists and is writable
+try:
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    print(f"Upload directory '{app.config['UPLOAD_FOLDER']}' ensured to exist.")
+except OSError as e:
+    print(f"Error creating upload directory '{app.config['UPLOAD_FOLDER']}': {e}")
+    print("Please ensure your user has write permissions to the project directory.")
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
@@ -118,21 +128,28 @@ def dashboard():
 @login_required
 def upload():
     if 'file' not in request.files:
-        return jsonify({'success': False, 'error': 'No file provided'})
+        return jsonify({'success': False, 'error': 'No file provided.'})
     
     file = request.files['file']
     if file.filename == '':
-        return jsonify({'success': False, 'error': 'No file selected'})
+        return jsonify({'success': False, 'error': 'No file selected.'})
     
     if file:
         filename = secure_filename(file.filename)
+        original_filename = filename
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        
         # Avoid overwriting files with the same name
         if os.path.exists(filepath):
             name, ext = os.path.splitext(filename)
-            filename = f"{name}_{int(time.time())}{ext}"
+            timestamp = int(time.time())
+            filename = f"{name}_{timestamp}{ext}"
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
+
+        try:
+            file.save(filepath)
+        except Exception as e:
+            return jsonify({'success': False, 'error': f"Failed to save file to disk: {str(e)}. Check server permissions for the 'uploads' folder."})
 
         try:
             # Process document and get summary
@@ -141,7 +158,7 @@ def upload():
 
             # Save document to database
             document = Document(
-                filename=filename,
+                filename=original_filename,
                 filepath=filepath,
                 summary=summary,
                 user_id=current_user.id
@@ -149,11 +166,15 @@ def upload():
             db.session.add(document)
             db.session.commit()
 
-            return jsonify({'success': True})
+            return jsonify({'success': True, 'message': 'File uploaded and processed successfully!'})
+        except FileNotFoundError as e:
+            return jsonify({'success': False, 'error': f"Processing error: {str(e)}. File might be corrupted or missing immediately after upload."})
         except Exception as e:
-            return jsonify({'success': False, 'error': str(e)})
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            return jsonify({'success': False, 'error': f"Document processing failed: {str(e)}. Please try a different document."})
 
-    return jsonify({'success': False, 'error': 'Invalid file type'})
+    return jsonify({'success': False, 'error': 'Invalid file type.'})
 
 @app.route('/document/<int:doc_id>')
 @login_required
@@ -175,14 +196,16 @@ def delete_document(doc_id):
         return jsonify({'success': False, 'error': 'Unauthorized'})
     
     try:
-        # Delete file from filesystem
-        os.remove(document.filepath)
-        # Delete from database
+        if os.path.exists(document.filepath):
+            os.remove(document.filepath)
+        else:
+            print(f"Warning: File not found on disk for document ID {doc_id}: {document.filepath}")
+
         db.session.delete(document)
         db.session.commit()
-        return jsonify({'success': True})
+        return jsonify({'success': True, 'message': 'Document deleted successfully.'})
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({'success': False, 'error': f"Failed to delete document: {str(e)}"})
 
 @app.route('/ask', methods=['POST'])
 @login_required
@@ -198,21 +221,28 @@ def ask():
 
     try:
         doc_id = int(doc_id)
-    except Exception:
-        return jsonify({'success': False, 'error': 'Invalid document ID.'})
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Invalid document ID format.'})
 
-    document = Document.query.get_or_404(doc_id)
+    document = Document.query.get(doc_id)
+    if not document:
+        return jsonify({'success': False, 'error': 'Document not found.'})
     if document.user_id != current_user.id:
-        return jsonify({'success': False, 'error': 'Unauthorized'})
+        return jsonify({'success': False, 'error': 'Unauthorized access to document.'})
 
     try:
         text = process_document(document.filepath)
         answer = get_answer(text, question)
         return jsonify({'success': True, 'answer': answer})
+    except FileNotFoundError:
+        return jsonify({'success': False, 'error': f"Document file for '{document.filename}' not found on server. Please re-upload it."})
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({'success': False, 'error': f"QA system failed: {str(e)}. Please try a different question or document."})
 
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True) 
+    
+    # Use port 5001 default to avoid macOS AirPlay conflict on port 5000
+    port = int(os.environ.get('PORT', 5001))
+    app.run(debug=True, port=port)
