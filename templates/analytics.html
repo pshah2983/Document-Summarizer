@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics - DocSum AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&family=Inter:wght@400;700&display=swap"
+        rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        html,
+        body {
+            height: 100%;
+            min-height: 100%;
+            overflow-y: auto !important;
+        }
+
+        body {
+            font-family: 'Montserrat', 'Inter', Arial, sans-serif;
+        }
+
+        .gradient-bg {
+            background: linear-gradient(135deg, #0f2027 0%, #2c5364 100%);
+            position: relative;
+        }
+
+        .glass-effect {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1.5px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .glow-line {
+            position: absolute;
+            width: 2px;
+            height: 100vh;
+            background: linear-gradient(180deg, #00fff0 0%, #0057ff 100%);
+            opacity: 0.18;
+            filter: blur(2px);
+            animation: moveLine 8s linear infinite;
+        }
+
+        .glow-line:nth-child(1) {
+            left: 12vw;
+            animation-delay: 0s;
+        }
+
+        .glow-line:nth-child(2) {
+            left: 28vw;
+            animation-delay: 2s;
+        }
+
+        .glow-line:nth-child(3) {
+            left: 55vw;
+            animation-delay: 4s;
+        }
+
+        .glow-line:nth-child(4) {
+            left: 77vw;
+            animation-delay: 6s;
+        }
+
+        @keyframes moveLine {
+            0% {
+                top: -100vh;
+            }
+
+            100% {
+                top: 100vh;
+            }
+        }
+
+        .stat-card {
+            text-align: center;
+            padding: 2rem;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px 0 rgba(0, 255, 255, 0.15);
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #00fff0;
+            line-height: 1;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: #9ca3af;
+            text-transform: uppercase;
+            margin-top: 0.5rem;
+        }
+
+        .stat-icon {
+            font-size: 1.5rem;
+            color: #00fff0;
+            margin-bottom: 0.5rem;
+        }
+
+        .domain-bar {
+            height: 24px;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+
+        .domain-bar:hover {
+            transform: scaleX(1.02);
+        }
+
+        .keyword-cloud {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .keyword-item {
+            padding: 6px 14px;
+            border-radius: 20px;
+            background: rgba(0, 255, 255, 0.1);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            color: #67e8f9;
+            transition: all 0.3s ease;
+        }
+
+        .keyword-item:hover {
+            background: rgba(0, 255, 255, 0.2);
+            transform: scale(1.05);
+        }
+
+        .keyword-count {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            margin-left: 4px;
+        }
+
+        .recent-doc {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            margin-bottom: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .recent-doc:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .domain-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .domain-legal {
+            background: rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+        }
+
+        .domain-medical {
+            background: rgba(34, 197, 94, 0.3);
+            color: #86efac;
+        }
+
+        .domain-financial {
+            background: rgba(234, 179, 8, 0.3);
+            color: #fde047;
+        }
+
+        .domain-technical {
+            background: rgba(59, 130, 246, 0.3);
+            color: #93c5fd;
+        }
+
+        .domain-academic {
+            background: rgba(168, 85, 247, 0.3);
+            color: #d8b4fe;
+        }
+
+        .domain-business {
+            background: rgba(20, 184, 166, 0.3);
+            color: #5eead4;
+        }
+
+        .domain-government {
+            background: rgba(249, 115, 22, 0.3);
+            color: #fdba74;
+        }
+
+        .domain-education {
+            background: rgba(236, 72, 153, 0.3);
+            color: #f9a8d4;
+        }
+
+        .domain-other {
+            background: rgba(107, 114, 128, 0.3);
+            color: #d1d5db;
+        }
+
+        .domain-unknown {
+            background: rgba(107, 114, 128, 0.3);
+            color: #d1d5db;
+        }
+    </style>
+</head>
+
+<body class="gradient-bg text-white min-h-screen">
+    <!-- Animated Glowing Lines -->
+    <div class="glow-line"></div>
+    <div class="glow-line"></div>
+    <div class="glow-line"></div>
+    <div class="glow-line"></div>
+
+    <!-- Navigation -->
+    <nav class="glass-effect p-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="text-2xl font-bold tracking-widest">
+                <a href="{{ url_for('index') }}" class="text-white hover:text-cyan-300 transition">DocSum AI</a>
+            </div>
+            <div class="flex items-center space-x-4">
+                <a href="{{ url_for('dashboard') }}" class="text-cyan-400 hover:text-cyan-300 transition">
+                    <i class="fas fa-home mr-1"></i> Dashboard
+                </a>
+                <span class="text-cyan-200">Welcome, {{ current_user.name }}</span>
+                <a href="{{ url_for('logout') }}" class="text-red-400 hover:text-red-300">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8">
+        <!-- Page Title -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold mb-2">
+                <i class="fas fa-chart-bar text-cyan-400 mr-2"></i>Analytics Dashboard
+            </h1>
+            <p class="text-cyan-200">Insights and statistics about your documents</p>
+        </div>
+
+        <!-- Overview Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="stat-card glass-effect rounded-xl">
+                <div class="stat-icon"><i class="fas fa-file-alt"></i></div>
+                <div class="stat-number">{{ total_documents }}</div>
+                <div class="stat-label">Total Documents</div>
+            </div>
+            <div class="stat-card glass-effect rounded-xl">
+                <div class="stat-icon"><i class="fas fa-file-word"></i></div>
+                <div class="stat-number">{{ "{:,}".format(total_words) }}</div>
+                <div class="stat-label">Total Words</div>
+            </div>
+            <div class="stat-card glass-effect rounded-xl">
+                <div class="stat-icon"><i class="fas fa-clock"></i></div>
+                <div class="stat-number">{{ total_reading_time }}</div>
+                <div class="stat-label">Minutes of Reading</div>
+            </div>
+            <div class="stat-card glass-effect rounded-xl">
+                <div class="stat-icon"><i class="fas fa-layer-group"></i></div>
+                <div class="stat-number">{{ domain_counts|length }}</div>
+                <div class="stat-label">Document Categories</div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <!-- Domain Distribution -->
+            <div class="glass-effect rounded-xl p-6">
+                <h2 class="text-xl font-bold mb-4">
+                    <i class="fas fa-pie-chart text-cyan-400 mr-2"></i>Documents by Domain
+                </h2>
+                {% if domain_counts %}
+                <div class="space-y-4">
+                    {% for domain, count in domain_counts.items() %}
+                    {% set percentage = (count / total_documents * 100)|round(1) if total_documents > 0 else 0 %}
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="domain-badge domain-{{ domain|lower }}">{{ domain }}</span>
+                            <span class="text-sm text-gray-400">{{ count }} doc{% if count != 1 %}s{% endif %} ({{
+                                percentage }}%)</span>
+                        </div>
+                        <div class="w-full bg-gray-700 rounded-full h-2">
+                            <div class="domain-bar bg-cyan-400 h-2 rounded-full" style="width: {{ percentage }}%"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-8 text-gray-400">
+                    <i class="fas fa-inbox text-4xl mb-4"></i>
+                    <p>No documents to analyze yet</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Upload Timeline Chart -->
+            <div class="glass-effect rounded-xl p-6">
+                <h2 class="text-xl font-bold mb-4">
+                    <i class="fas fa-chart-line text-cyan-400 mr-2"></i>Upload Activity
+                </h2>
+                {% if monthly_data %}
+                <canvas id="uploadChart" height="200"></canvas>
+                {% else %}
+                <div class="text-center py-8 text-gray-400">
+                    <i class="fas fa-chart-line text-4xl mb-4"></i>
+                    <p>Upload documents to see activity trends</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Top Keywords -->
+            <div class="glass-effect rounded-xl p-6">
+                <h2 class="text-xl font-bold mb-4">
+                    <i class="fas fa-tags text-cyan-400 mr-2"></i>Top Keywords
+                </h2>
+                {% if top_keywords %}
+                <div class="keyword-cloud">
+                    {% for keyword, count in top_keywords %}
+                    <span class="keyword-item">
+                        {{ keyword }}<span class="keyword-count">({{ count }})</span>
+                    </span>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-8 text-gray-400">
+                    <i class="fas fa-tags text-4xl mb-4"></i>
+                    <p>Keywords will appear after document analysis</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Recent Documents -->
+            <div class="glass-effect rounded-xl p-6">
+                <h2 class="text-xl font-bold mb-4">
+                    <i class="fas fa-history text-cyan-400 mr-2"></i>Recent Documents
+                </h2>
+                {% if recent_docs %}
+                <div>
+                    {% for doc in recent_docs %}
+                    <div class="recent-doc">
+                        <i class="fas fa-file-alt text-cyan-400 mr-3"></i>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="font-medium truncate">{{ doc.filename }}</h4>
+                            <p class="text-sm text-gray-400">{{ doc.upload_date.strftime('%Y-%m-%d %H:%M') }}</p>
+                        </div>
+                        <span class="domain-badge domain-{{ (doc.domain or 'other')|lower }} ml-2">
+                            {{ doc.domain or 'Unknown' }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-8 text-gray-400">
+                    <i class="fas fa-folder-open text-4xl mb-4"></i>
+                    <p>No documents uploaded yet</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if monthly_data %}
+    <script>
+        // Upload Activity Chart
+        const ctx = document.getElementById('uploadChart').getContext('2d');
+        const monthlyData = {{ monthly_data| tojson }};
+
+        // Sort months and prepare data
+        const sortedMonths = Object.keys(monthlyData).sort();
+        const labels = sortedMonths.map(m => {
+            const [year, month] = m.split('-');
+            const date = new Date(year, month - 1);
+            return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        });
+        const data = sortedMonths.map(m => monthlyData[m]);
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Documents Uploaded',
+                    data: data,
+                    borderColor: '#00fff0',
+                    backgroundColor: 'rgba(0, 255, 240, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#00fff0',
+                    pointBorderColor: '#fff',
+                    pointRadius: 5,
+                    pointHoverRadius: 7
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#9ca3af'
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#9ca3af',
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+    {% endif %}
+</body>
+
+</html>

@@ -4,6 +4,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import os
+import json
 from datetime import datetime
 import time
 from dotenv import load_dotenv
@@ -11,7 +12,10 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-from utils.document_processor import process_document, get_summary, get_answer
+from utils.document_processor import (
+    process_document, get_summary, get_answer, 
+    get_document_metadata, calculate_reading_time, get_word_count
+)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
@@ -20,13 +24,12 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Ensure upload directory exists and is writable
+# Ensure upload directory exists
 try:
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     print(f"Upload directory '{app.config['UPLOAD_FOLDER']}' ensured to exist.")
 except OSError as e:
     print(f"Error creating upload directory '{app.config['UPLOAD_FOLDER']}': {e}")
-    print("Please ensure your user has write permissions to the project directory.")
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
@@ -54,10 +57,29 @@ class Document(db.Model):
     summary = db.Column(db.Text)
     upload_date = db.Column(db.DateTime, default=datetime.utcnow)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    # Metadata fields
+    domain = db.Column(db.String(100), default='Unknown')
+    keywords = db.Column(db.Text, default='[]')
+    entities = db.Column(db.Text, default='{}')
+    reading_time = db.Column(db.Integer, default=1)
+    word_count = db.Column(db.Integer, default=0)
+    
+    def get_keywords_list(self):
+        try:
+            return json.loads(self.keywords) if self.keywords else []
+        except:
+            return []
+    
+    def get_entities_dict(self):
+        try:
+            return json.loads(self.entities) if self.entities else {}
+        except:
+            return {}
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 # Routes
 @app.route('/')
@@ -124,6 +146,47 @@ def dashboard():
     documents = Document.query.filter_by(user_id=current_user.id).order_by(Document.upload_date.desc()).all()
     return render_template('dashboard.html', documents=documents)
 
+@app.route('/analytics')
+@login_required
+def analytics():
+    """Analytics dashboard showing document statistics."""
+    documents = Document.query.filter_by(user_id=current_user.id).all()
+    
+    total_documents = len(documents)
+    total_words = sum(doc.word_count or 0 for doc in documents)
+    total_reading_time = sum(doc.reading_time or 0 for doc in documents)
+    
+    domain_counts = {}
+    for doc in documents:
+        domain = doc.domain or 'Unknown'
+        domain_counts[domain] = domain_counts.get(domain, 0) + 1
+    
+    all_keywords = []
+    for doc in documents:
+        all_keywords.extend(doc.get_keywords_list())
+    
+    keyword_counts = {}
+    for kw in all_keywords:
+        keyword_counts[kw] = keyword_counts.get(kw, 0) + 1
+    
+    top_keywords = sorted(keyword_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+    recent_docs = documents[:5]
+    
+    monthly_data = {}
+    for doc in documents:
+        month_key = doc.upload_date.strftime('%Y-%m')
+        monthly_data[month_key] = monthly_data.get(month_key, 0) + 1
+    
+    return render_template('analytics.html',
+        total_documents=total_documents,
+        total_words=total_words,
+        total_reading_time=total_reading_time,
+        domain_counts=domain_counts,
+        top_keywords=top_keywords,
+        recent_docs=recent_docs,
+        monthly_data=monthly_data
+    )
+
 @app.route('/upload', methods=['POST'])
 @login_required
 def upload():
@@ -139,7 +202,6 @@ def upload():
         original_filename = filename
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         
-        # Avoid overwriting files with the same name
         if os.path.exists(filepath):
             name, ext = os.path.splitext(filename)
             timestamp = int(time.time())
@@ -149,30 +211,34 @@ def upload():
         try:
             file.save(filepath)
         except Exception as e:
-            return jsonify({'success': False, 'error': f"Failed to save file to disk: {str(e)}. Check server permissions for the 'uploads' folder."})
+            return jsonify({'success': False, 'error': f"Failed to save file: {str(e)}"})
 
         try:
-            # Process document and get summary
             text = process_document(filepath)
             summary = get_summary(text)
+            metadata = get_document_metadata(text)
+            reading_time = calculate_reading_time(text)
+            word_count = get_word_count(text)
 
-            # Save document to database
             document = Document(
                 filename=original_filename,
                 filepath=filepath,
                 summary=summary,
-                user_id=current_user.id
+                user_id=current_user.id,
+                domain=metadata.get('domain', 'Unknown'),
+                keywords=json.dumps(metadata.get('keywords', [])),
+                entities=json.dumps(metadata.get('entities', {})),
+                reading_time=reading_time,
+                word_count=word_count
             )
             db.session.add(document)
             db.session.commit()
 
             return jsonify({'success': True, 'message': 'File uploaded and processed successfully!'})
-        except FileNotFoundError as e:
-            return jsonify({'success': False, 'error': f"Processing error: {str(e)}. File might be corrupted or missing immediately after upload."})
         except Exception as e:
             if os.path.exists(filepath):
                 os.remove(filepath)
-            return jsonify({'success': False, 'error': f"Document processing failed: {str(e)}. Please try a different document."})
+            return jsonify({'success': False, 'error': f"Document processing failed: {str(e)}"})
 
     return jsonify({'success': False, 'error': 'Invalid file type.'})
 
@@ -185,7 +251,12 @@ def get_document(doc_id):
     
     return jsonify({
         'success': True,
-        'summary': document.summary
+        'summary': document.summary,
+        'domain': document.domain,
+        'keywords': document.get_keywords_list(),
+        'entities': document.get_entities_dict(),
+        'reading_time': document.reading_time,
+        'word_count': document.word_count
     })
 
 @app.route('/document/<int:doc_id>', methods=['DELETE'])
@@ -198,9 +269,6 @@ def delete_document(doc_id):
     try:
         if os.path.exists(document.filepath):
             os.remove(document.filepath)
-        else:
-            print(f"Warning: File not found on disk for document ID {doc_id}: {document.filepath}")
-
         db.session.delete(document)
         db.session.commit()
         return jsonify({'success': True, 'message': 'Document deleted successfully.'})
@@ -224,7 +292,7 @@ def ask():
     except ValueError:
         return jsonify({'success': False, 'error': 'Invalid document ID format.'})
 
-    document = Document.query.get(doc_id)
+    document = db.session.get(Document, doc_id)
     if not document:
         return jsonify({'success': False, 'error': 'Document not found.'})
     if document.user_id != current_user.id:
@@ -235,14 +303,48 @@ def ask():
         answer = get_answer(text, question)
         return jsonify({'success': True, 'answer': answer})
     except FileNotFoundError:
-        return jsonify({'success': False, 'error': f"Document file for '{document.filename}' not found on server. Please re-upload it."})
+        return jsonify({'success': False, 'error': f"Document file not found. Please re-upload."})
     except Exception as e:
-        return jsonify({'success': False, 'error': f"QA system failed: {str(e)}. Please try a different question or document."})
+        return jsonify({'success': False, 'error': f"QA failed: {str(e)}"})
+
+@app.route('/reprocess')
+@login_required
+def reprocess_documents():
+    """Re-process all documents for the current user to update metadata."""
+    documents = Document.query.filter_by(user_id=current_user.id).all()
+    processed = 0
+    errors = 0
+    
+    for document in documents:
+        try:
+            text = process_document(document.filepath)
+            metadata = get_document_metadata(text)
+            
+            document.domain = metadata.get('domain', 'Unknown')
+            document.keywords = json.dumps(metadata.get('keywords', []))
+            document.entities = json.dumps(metadata.get('entities', {}))
+            document.reading_time = calculate_reading_time(text)
+            document.word_count = get_word_count(text)
+            document.summary = get_summary(text)
+            
+            processed += 1
+        except Exception as e:
+            print(f"Error reprocessing document {document.id}: {e}")
+            errors += 1
+            continue
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Reprocessed {processed} documents. {errors} errors.',
+        'processed': processed,
+        'errors': errors
+    })
 
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
     
-    # Use port 5001 default to avoid macOS AirPlay conflict on port 5000
     port = int(os.environ.get('PORT', 5001))
     app.run(debug=True, port=port)
